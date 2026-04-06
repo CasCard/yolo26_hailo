@@ -1,12 +1,14 @@
-# YOLO26 Object Detection on Raspberry Pi 5 + Hailo-8L
+# YOLO26 Detection and Segmentation on Raspberry Pi 5 + Hailo-8L
 
-This repository provides a complete pipeline for deploying YOLO26n object detection models on the Raspberry Pi 5 AI Kit (Hailo-8L NPU). It includes scripts for model conversion (ONNX → HEF), C++ inference/evaluation code, and Python inference examples.
+This repository provides a pipeline for deploying YOLO26 models on the Raspberry Pi 5 AI Kit (Hailo-8L NPU). It includes model export tooling (ONNX → HEF), C++ detection inference/evaluation code, Python inference examples, and an initial segmentation workflow for YOLO26 segmentation models.
 
 <div align="center">
   <img src="assets/yolo26_performance_tradeoff.png" width="600" />
 </div>
 
 ## Performance Summary (Raspberry Pi 5 + Hailo-8L)
+
+### Detection
 
 | Model | CPU mAP (FP32) | CPU FPS | Hailo mAP (INT8) | Hailo FPS | Speedup | Accuracy Retention |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -17,16 +19,25 @@ This repository provides a complete pipeline for deploying YOLO26n object detect
 
 *\*Tested on COCO val2017 with letterbox preprocessing. FPS measured end-to-end (preprocessing + inference + postprocessing).*
 
+### Segmentation
+
+| Model | CPU AP (mask, FP32) | CPU FPS | Hailo AP (mask, INT8) | Hailo FPS | Speedup | Accuracy Retention |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **YOLO26n-seg** | 0.465 | 1.09 | 0.296 | 13.08 | 11.95x | 63.8% |
+| **YOLO26s-seg** | 0.471 | 0.53 | 0.122 | 16.38 | 30.94x | 25.9% |
+
+*\*Segmentation AP values are mask AP on COCO val2017. The Hailo numbers above come from full-COCO evaluation, while the CPU FP32 numbers currently come from 5-image smoke evaluations on the Raspberry Pi 5 CPU and should be treated as provisional until full CPU COCO runs are completed.*
+
 
 
 ## repository Structure
 
 ```
 .
-├── cpp/                 # C++ inference and COCO evaluation code
+├── cpp/                 # C++ detection inference and COCO evaluation code
 ├── export/              # Python package for model conversion (ONNX → HEF)
 ├── models/              # Place your .onnx and .hef models here
-├── python/              # Python inference scripts
+├── python/              # Python detection and segmentation scripts
 ├── data/                # Data directory (calibration images, COCO val)
 ├── requirements.txt     # Python dependencies
 ├── setup.py             # Setup script
@@ -49,6 +60,14 @@ This project assumes you are running inside a Python virtual environment that ha
 ```bash
 source ~/hailo-apps/venv_hailo_apps/bin/activate
 ```
+
+The environment used for the segmentation tests in this repository was based on:
+
+- `hailort==4.23.0`
+- `hailo-tappas-core-python-binding==5.1.0`
+- editable `hailo_apps` from `hailo-ai/hailo-apps`
+
+For a frozen package snapshot of that environment, see `release/venv_hailo_apps_requirements.txt`.
 
 To install additional dependencies for this project:
 
@@ -144,8 +163,28 @@ python -m export.cli \
   --tag my_experiment
 ```
 
+Segmentation export follows the same flow, but uses a segmentation-aware variant definition:
+
+```bash
+python -m export.cli \
+  --variant yolo26n_seg \
+  --target hailo8l \
+  --onnx models/yolo26n-seg.onnx \
+  --calib_dir data/coco/val2017 \
+  --tag seg_experiment
+```
+
+```bash
+python -m export.cli \
+  --variant yolo26s_seg \
+  --target hailo8l \
+  --onnx models/yolo26s-seg.onnx \
+  --calib_dir data/coco/val2017 \
+  --tag seg_experiment
+```
+
 ### Arguments
--   `--variant`: `yolo26n` (default), `yolo26s`, `yolo26m`, `yolo26l`.
+-   `--variant`: `yolo26n` (default), `yolo26s`, `yolo26m`, `yolo26l`, `yolo26n_seg`, `yolo26s_seg`.
 -   `--target`: `hailo8l` (default), `hailo8`.
 -   `--onnx`: Path to the input ONNX model.
 -   `--calib_dir`: Directory containing calibration images.
@@ -220,6 +259,46 @@ Measure performance (FPS) without I/O overhead.
 ```bash
 python python/benchmark_inference.py --hef models/yolo26n.hef --iterations 1000
 ```
+
+### Single Image Segmentation
+
+```bash
+python python/segment_image.py input.jpg --hef models/yolo26n_seg.hef --output output_segmented.jpg
+```
+
+For COCO-pretrained segmentation HEFs, class count and class names are inferred automatically from the HEF.
+
+### Segmentation Benchmark
+
+Use the segmentation benchmark when you want end-to-end latency rather than raw detection-only throughput.
+
+```bash
+python python/benchmark_segmentation.py \
+  --hef models/yolo26n_seg.hef \
+  --images-dir data/coco/val2017 \
+  --iterations 300 \
+  --warmup 30 \
+  --cache-images 64 \
+  --output results/yolo26n_seg_benchmark.json
+```
+
+Custom-class example:
+
+```bash
+python python/benchmark_segmentation.py \
+  --hef models/yolo26s_seg.hef \
+  --image data/sample.jpg \
+  --iterations 300 \
+  --warmup 30 \
+  --num-classes 3 \
+  --class-names clip rootstock scion \
+  --output results/yolo26s_seg_single.json
+```
+
+Notes:
+- `--image` is useful for clean latency measurement.
+- `--images-dir` is better when you want preprocessing and mask assembly to reflect a realistic workload.
+- segmentation HEFs require host-side mask decoding and prototype-mask reconstruction, so end-to-end numbers are meaningfully lower than the raw Hailo hardware benchmark.
 
 ---
 
