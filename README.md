@@ -26,7 +26,7 @@ This repository provides a pipeline for deploying YOLO26 models on the Raspberry
 | **YOLO26n-seg** | 0.465 | 1.09 | 0.296 | 13.08 | 11.95x | 63.8% |
 | **YOLO26s-seg** | 0.471 | 0.53 | 0.122 | 16.38 | 30.94x | 25.9% |
 
-*\*Segmentation AP values are mask AP on COCO val2017. The Hailo numbers above come from full-COCO evaluation, while the CPU FP32 numbers currently come from 5-image smoke evaluations on the Raspberry Pi 5 CPU and should be treated as provisional until full CPU COCO runs are completed.*
+*\*Segmentation AP values are mask AP on COCO val2017. The Hailo numbers above come from full-COCO evaluation, while the CPU FP32 numbers currently come from 5-image smoke evaluations on the Raspberry Pi 5 CPU and should be treated as provisional until full CPU COCO runs are completed. For AP evaluation, the confidence threshold was set to `0.001` to preserve recall, so the reported FPS is evaluation throughput and is lower than practical stream/benchmark FPS measured at deployment-style thresholds such as `0.25`.*
 
 
 
