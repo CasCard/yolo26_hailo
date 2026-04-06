@@ -1,0 +1,25 @@
+# Dedicated .alls script for YOLO26 Segmentation on Hailo-8L
+# Segmentation models have two output branches (detection head + proto mask head)
+# which roughly doubles memory vs detection-only models.
+
+# Step 1: Normalize input
+normalization1 = normalization([0.0, 0.0, 0.0], [255.0, 255.0, 255.0])
+
+# Step 2: Max compiler effort
+performance_param(compiler_optimization_level=max)
+
+# Step 3: Global optimization level (0=fastest, 2=standard accuracy)
+model_optimization_flavor(optimization_level=2)
+
+# Step 4: Force multi-context — required for seg models on hailo8l.
+# 'enabled' forces partitioning from the start (unlike 'allowed' which tries
+# single-context first and fails if it can't fit).
+# hailo8l supports up to 3 contexts.
+context_switch_param(mode=enabled)
+
+# Step 5: Calibration config
+model_optimization_config(calibration, calibset_size=32)
+
+# Step 6: Pre-quantization clipping to reduce outlier impact on quantization quality
+pre_quantization_optimization(activation_clipping, layers={*}, mode=percentile, clipping_values=[0.01, 99.99])
+pre_quantization_optimization(weights_clipping, layers={*}, mode=percentile, clipping_values=[0.01, 99.99])
